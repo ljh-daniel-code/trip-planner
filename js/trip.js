@@ -153,10 +153,11 @@ function itemRow(it, idx, total, color) {
   const link = kakaoMapLink(it);
   return `
     <li class="item" data-id="${it.id}">
-      <span class="num" style="background:${it.lat ? color : '#b8bfcc'}">${idx + 1}</span>
+      <span class="num" style="background:${color}">${idx + 1}</span>
       <div class="item-main">
         <div class="item-title">${it.time ? `<span class="time">${esc(it.time)}</span>` : ''}${esc(it.title)}</div>
-        ${it.address ? `<div class="item-addr">${esc(it.address)}</div>` : ''}
+        ${it.address ? `<div class="item-addr">${esc(it.address)}</div>`
+          : canEdit() && !it.lat ? `<div class="item-addr no-loc">📍 지도 위치 없음 · ✎ 눌러서 지정</div>` : ''}
         ${it.memo ? `<div class="item-memo">${esc(it.memo)}</div>` : ''}
       </div>
       <div class="item-actions">
@@ -324,6 +325,18 @@ function openItemEditor(item, dayIndex) {
       paintPicked();
 
       $('[data-save]', body).onclick = async (e) => {
+        // 검색창에 주소만 쓰고 결과를 누르지 않았으면, 그 주소로 위치를 자동 지정
+        const typed = q?.value.trim();
+        if (!f.lat && typed) {
+          e.target.disabled = true;
+          const [hit] = await searchAddress(typed).catch(() => []);
+          e.target.disabled = false;
+          if (hit) {
+            Object.assign(f, { place_name: hit.name, address: hit.address, lat: hit.lat, lng: hit.lng, kakao_place_id: null });
+          } else if (!(await confirmBox(`'${typed}' 위치를 선택하지 않았어요. 검색 결과에서 장소를 누르거나 지도에서 직접 찍을 수 있어요.\n지도 위치 없이 저장할까요?`, '위치 없이 저장'))) {
+            return;
+          }
+        }
         const title = titleEl.value.trim() || f.place_name;
         if (!title) return toast('일정 이름을 입력하거나 장소를 골라주세요');
         const day_index = +$('[data-day]', body).value;

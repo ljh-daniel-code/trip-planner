@@ -199,6 +199,8 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .item-title { font-weight: 650; word-break: keep-all; overflow-wrap: anywhere; }
 .time { color: var(--primary); font-weight: 700; margin-right: 6px; font-variant-numeric: tabular-nums; }
 .item-addr { font-size: 12.5px; color: var(--sub); margin-top: 2px; }
+.item-addr.no-loc { color: #c27a00; }
+.confirm-msg { white-space: pre-line; }
 .item-memo { font-size: 13px; margin-top: 4px; background: #f6f7fa; border-radius: 8px; padding: 6px 8px; white-space: pre-wrap; }
 .item-actions { display: flex; gap: 4px; flex: none; }
 .add-item { width: 100%; margin: 6px 0 4px; border-style: dashed; color: var(--primary); background: transparent; }

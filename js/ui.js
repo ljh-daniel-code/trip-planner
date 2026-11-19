@@ -81,8 +81,9 @@ export function confirmBox(message, okLabel = '확인', danger = false) {
         body.innerHTML = `<p class="confirm-msg">${esc(message)}</p>
           <div class="row gap"><button class="btn ghost grow" data-no>취소</button>
           <button class="btn grow ${danger ? 'danger' : 'primary'}" data-ok>${esc(okLabel)}</button></div>`;
-        $('[data-no]', body).onclick = () => { s?.close(); resolve(false); };
-        $('[data-ok]', body).onclick = () => { s?.close(); resolve(true); };
+        // 먼저 결과를 확정한 뒤 닫기 (닫을 때 onClose 가 false 로 먼저 확정하지 않도록)
+        $('[data-no]', body).onclick = () => { resolve(false); s?.close(); };
+        $('[data-ok]', body).onclick = () => { resolve(true); s?.close(); };
       },
       onClose: () => resolve(false),
     });
