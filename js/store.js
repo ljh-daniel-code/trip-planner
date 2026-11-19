@@ -4,7 +4,8 @@ import { CONFIG } from './config.js';
 const DATA_TABLES = ['itinerary_items', 'checklist_items', 'notes', 'expenses'];
 const LOG_IGNORED = ['updated_at', 'created_at', 'id', 'trip_id', 'created_by', 'position', 'owner_id'];
 
-export const isDemo = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY);
+// 주소 끝에 ?demo 를 붙이면 실제 데이터와 분리된 데모 모드로 열림 (테스트용)
+export const isDemo = !(CONFIG.SUPABASE_URL && CONFIG.SUPABASE_ANON_KEY) || new URLSearchParams(location.search).has('demo');
 
 let sb = null;
 
@@ -140,7 +141,7 @@ export async function loadTrip(tripId, userId) {
       const p = demo.profiles.find((x) => x.id === m.user_id) || {};
       return { ...m, nickname: p.nickname || '알 수 없음', avatar_url: p.avatar_url };
     });
-    const pick = (t) => demo[t].filter((r) => r.trip_id === tripId);
+    const pick = (t) => demo[t].filter((r) => r.trip_id === tripId).map((r) => ({ ...r }));
     return {
       trip: { ...trip }, role: me.role, members,
       items: pick('itinerary_items'), checklist: pick('checklist_items'),

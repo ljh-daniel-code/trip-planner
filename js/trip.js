@@ -1,7 +1,7 @@
 // 여행 상세 화면: 상단 항목(일행/준비물/메모/가계부/기록) + 지도 + 일정
 import * as store from './store.js';
 import { session, go, demoBanner } from './app.js';
-import { TripMap, hasMapKey, searchPlaces, DAY_COLORS, kakaoMapLink } from './map.js';
+import { TripMap, hasMapKey, searchPlaces, DAY_COLORS, kakaoMapLink, createPickMap, reverseGeocode } from './map.js';
 import {
   esc, $, $$, toast, won, fmtDate, addDays, isoDate, dayCount, tripRangeLabel, timeAgo,
   openSheet, openSheets, confirmBox, avatar, ROLE_LABEL,
@@ -181,6 +181,22 @@ async function move(it, dir) {
   try { await store.reorder('itinerary_items', rows); } catch (e) { toast('순서 저장 실패: ' + e.message); refresh(); }
 }
 
+// 시간 순서로 정리: 시간이 있는 일정은 시간순으로 정렬.
+// 시간이 없는 일정은 바로 앞의 시간 있는 일정에 붙어서 함께 움직임 (예: '점심' 뒤의 '산책').
+// 새로 추가한 시간 없는 일정은 맨 뒤.
+async function placeByTime(id, day, time) {
+  const list = [...itemsOfDay(day).filter((x) => x.id !== id), { id, time }];
+  const head = [];
+  const groups = [];
+  for (const x of list) {
+    if (x.time) groups.push([x]);
+    else (groups.length ? groups[groups.length - 1] : head).push(x);
+  }
+  groups.sort((a, b) => (a[0].time < b[0].time ? -1 : a[0].time > b[0].time ? 1 : 0)); // 같은 시간은 기존 순서 유지
+  const ordered = [...head, ...groups.flat()];
+  await store.reorder('itinerary_items', ordered.map((x, k) => ({ id: x.id, position: k })));
+}
+
 // ---------------- 지도 ----------------
 async function initMap() {
   const el = $('#map');
@@ -215,6 +231,7 @@ function paintMap() {
 // ---------------- 일정 추가/수정 ----------------
 function openItemEditor(item, dayIndex) {
   const isNew = !item;
+  const orig = item ? { day_index: item.day_index, time: item.time } : {};
   const f = item ? { ...item } : { day_index: dayIndex, title: '', time: '', memo: '', place_name: null, address: null, lat: null, lng: null, kakao_place_id: null };
   let results = [];
   let searching = false;
@@ -227,7 +244,8 @@ function openItemEditor(item, dayIndex) {
       body.innerHTML = `
         ${hasMapKey() ? `
         <div class="search-box"><span>🔍</span><input type="search" data-q placeholder="장소 검색 (예: 해운대 맛집, 경복궁)" enterkeyhint="search"></div>
-        <ul class="place-results"></ul>` : `<p class="muted small">카카오 키를 설정하면 장소를 검색해 지도에 표시할 수 있어요.</p>`}
+        <ul class="place-results"></ul>
+        <button type="button" class="btn ghost block pick-btn" data-pick>📍 지도에서 직접 위치 찍기</button>` : `<p class="muted small">카카오 키를 설정하면 장소를 검색해 지도에 표시할 수 있어요.</p>`}
         <div class="picked"></div>
         <label class="field"><span>일정 이름</span><input class="input" data-title maxlength="60" placeholder="예: 점심 – 밀면" value="${esc(f.title)}"></label>
         <div class="row gap">
@@ -249,10 +267,28 @@ function openItemEditor(item, dayIndex) {
         const un = $('[data-unpick]', body);
         if (un) un.onclick = () => { Object.assign(f, { place_name: null, address: null, lat: null, lng: null, kakao_place_id: null }); paintPicked(); };
       };
+      const openPicker = () => {
+        const dayItems = itemsOfDay(+$('[data-day]', body).value).filter((i) => i.lat);
+        const base = f.lat ? { lat: f.lat, lng: f.lng, level: 3 }
+          : dayItems.length ? { lat: dayItems[dayItems.length - 1].lat, lng: dayItems[dayItems.length - 1].lng, level: 5 }
+          : regionCenter() ? { ...regionCenter(), level: 7 } : { lat: 36.4, lng: 127.8, level: 12 };
+        openMapPicker(base, q?.value.trim() || '', (p) => {
+          Object.assign(f, { place_name: p.name, address: p.address, lat: p.lat, lng: p.lng, kakao_place_id: null });
+          if (!titleEl.value.trim() || titleEl.dataset.auto) { titleEl.value = p.name; titleEl.dataset.auto = '1'; }
+          results = []; if (q) q.value = ''; paintResults(); paintPicked();
+        });
+      };
+      const pickBtn = $('[data-pick]', body);
+      if (pickBtn) pickBtn.onclick = openPicker;
       const paintResults = () => {
         if (!resEl) return;
-        resEl.innerHTML = searching ? '<li class="muted">검색 중…</li>' : results.map((p, i) => `
+        const noResult = !searching && !results.length && q?.value.trim();
+        resEl.innerHTML = searching ? '<li class="muted">검색 중…</li>'
+          : noResult ? `<li class="no-result">'${esc(q.value.trim())}' 검색 결과가 없어요.<br><button type="button" class="btn primary" data-pick2>📍 지도에서 직접 위치 찍기</button></li>`
+          : results.map((p, i) => `
           <li><button class="place-row" data-i="${i}"><b>${esc(p.name)}</b><small>${esc(p.category)} · ${esc(p.address)}</small></button></li>`).join('');
+        const p2 = $('[data-pick2]', resEl);
+        if (p2) p2.onclick = openPicker;
         $$('[data-i]', resEl).forEach((b) => (b.onclick = () => {
           const p = results[+b.dataset.i];
           Object.assign(f, { place_name: p.name, address: p.address, lat: p.lat, lng: p.lng, kakao_place_id: p.id });
@@ -288,9 +324,13 @@ function openItemEditor(item, dayIndex) {
         };
         e.target.disabled = true;
         try {
-          if (isNew || day_index !== item.day_index) row.position = itemsOfDay(day_index).length;
-          if (isNew) await store.insertRow('itinerary_items', { trip_id: S.tripId, ...row });
-          else await store.updateRow('itinerary_items', item.id, row);
+          let id;
+          if (isNew) id = (await store.insertRow('itinerary_items', { trip_id: S.tripId, ...row, position: 9999 })).id;
+          else { await store.updateRow('itinerary_items', item.id, row); id = item.id; }
+          // 새 일정이거나 날짜·시간이 바뀌면 시간 순서에 맞는 자리로 이동
+          if (isNew || day_index !== orig.day_index || (row.time || null) !== (orig.time || null)) {
+            await placeByTime(id, day_index, row.time);
+          }
           close();
           if (S.day !== 'all') S.day = day_index;
           await refresh();
@@ -304,6 +344,59 @@ function openItemEditor(item, dayIndex) {
     },
   });
   return sheet;
+}
+
+// ---------------- 지도에서 직접 위치 고르기 ----------------
+function openMapPicker(center, suggestedName, onPick) {
+  openSheet({
+    title: '지도에서 위치 선택',
+    full: true,
+    render(body, close) {
+      if (body.dataset.ready) return;
+      body.dataset.ready = '1';
+      body.innerHTML = `
+        <p class="muted small">지도를 움직여 가운데 핀을 원하는 곳에 맞추세요. 지도를 누르면 그곳으로 이동해요.</p>
+        <div class="pick-wrap"><div class="pick-map"></div><div class="pick-pin"></div></div>
+        <div class="pick-addr muted">지도를 불러오는 중…</div>
+        <label class="field"><span>장소 이름</span><input class="input" data-name maxlength="60" placeholder="비워두면 주소로 저장돼요" value="${esc(suggestedName)}"></label>
+        <button class="btn primary block" data-ok disabled>이 위치로 선택</button>`;
+      const addrEl = $('.pick-addr', body);
+      const ok = $('[data-ok]', body);
+      let cur = null;
+      let timer;
+      const onMove = (lat, lng) => {
+        cur = { lat, lng, address: null, building: null };
+        ok.disabled = true;
+        addrEl.textContent = '주소 찾는 중…';
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+          const me = cur;
+          const a = await reverseGeocode(lat, lng).catch(() => null);
+          if (me !== cur) return; // 그 사이 지도가 또 움직임
+          cur.address = a ? a.road || a.jibun : null;
+          cur.building = a?.building || null;
+          addrEl.classList.toggle('muted', !a);
+          addrEl.innerHTML = a
+            ? `<b>${esc(cur.building ? `${cur.building} · ` : '')}${esc(a.road || a.jibun)}</b>${a.road && a.jibun ? `<small>지번 ${esc(a.jibun)}</small>` : ''}`
+            : '주소가 없는 곳이에요 (바다·산 등). 그래도 이 위치로 선택할 수 있어요.';
+          ok.disabled = false;
+        }, 250);
+      };
+      // 시트가 올라오는 애니메이션이 끝난 뒤 지도 생성 (크기 계산 때문)
+      setTimeout(async () => {
+        try {
+          const pm = await createPickMap($('.pick-map', body), center, onMove);
+          setTimeout(() => { pm.relayout(); pm.emit(); }, 50);
+        } catch (e) { addrEl.textContent = e.message; }
+      }, 320);
+      ok.onclick = () => {
+        if (!cur) return;
+        const name = $('[data-name]', body).value.trim() || cur.building || cur.address || '선택한 위치';
+        onPick({ name, address: cur.address, lat: cur.lat, lng: cur.lng });
+        close();
+      };
+    },
+  });
 }
 
 // ---------------- 여행 정보 ----------------

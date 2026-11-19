@@ -110,6 +110,37 @@ export async function searchPlaces(keyword, near) {
   });
 }
 
+// 좌표 → 주소
+export async function reverseGeocode(lat, lng) {
+  const kakao = await loadKakao();
+  const geocoder = new kakao.maps.services.Geocoder();
+  return new Promise((resolve) => {
+    geocoder.coord2Address(lng, lat, (data, status) => {
+      if (status !== kakao.maps.services.Status.OK || !data[0]) return resolve(null);
+      const d = data[0];
+      resolve({
+        road: d.road_address?.address_name || null,
+        jibun: d.address?.address_name || null,
+        building: d.road_address?.building_name || null,
+      });
+    });
+  });
+}
+
+// 위치 고르기용 지도: 가운데 고정 핀, 지도를 움직이거나 누르면 위치 변경
+export async function createPickMap(el, center, onMove) {
+  const kakao = await loadKakao();
+  const map = new kakao.maps.Map(el, { center: new kakao.maps.LatLng(center.lat, center.lng), level: center.level || 4 });
+  map.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+  const emit = () => { const c = map.getCenter(); onMove(c.getLat(), c.getLng()); };
+  kakao.maps.event.addListener(map, 'idle', emit);
+  kakao.maps.event.addListener(map, 'click', (e) => map.panTo(e.latLng));
+  return {
+    relayout() { const c = map.getCenter(); map.relayout(); map.setCenter(c); },
+    emit,
+  };
+}
+
 // 지역 이름 → 좌표
 export async function geocodeRegion(full) {
   try {

@@ -228,6 +228,21 @@ textarea.input { resize: vertical; line-height: 1.5; }
 .place-results li.muted { padding: 10px; }
 .place-row { width: 100%; text-align: left; padding: 11px 6px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; }
 .place-row small { color: var(--sub); }
+.pick-btn { min-height: 40px; font-size: 14px; color: var(--primary); border-style: dashed; margin-top: 8px; }
+.no-result { padding: 14px 6px; text-align: center; color: var(--sub); font-size: 14px; }
+.no-result .btn { margin-top: 10px; min-height: 40px; font-size: 14px; }
+.pick-wrap { position: relative; height: 42vh; border-radius: var(--radius); overflow: hidden; margin: 8px 0; background: #e8ecf3; }
+.pick-map { width: 100%; height: 100%; }
+.pick-pin {
+  position: absolute; left: 50%; top: 50%; z-index: 5; pointer-events: none;
+  width: 30px; height: 30px; margin: -36px 0 0 -15px; background: var(--danger);
+  border: 3px solid #fff; border-radius: 50% 50% 50% 0; transform: rotate(-45deg);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .35);
+}
+.pick-pin::after { content: ''; position: absolute; left: 50%; top: 50%; width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; background: #fff; }
+.pick-wrap::after { content: ''; position: absolute; left: 50%; top: 50%; width: 10px; height: 4px; margin: -2px 0 0 -5px; border-radius: 50%; background: rgba(0, 0, 0, .3); z-index: 4; pointer-events: none; }
+.pick-addr { background: #fff; border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; min-height: 44px; justify-content: center; }
+.pick-addr small { color: var(--sub); }
 .picked-card { display: flex; align-items: center; gap: 10px; background: var(--primary-weak); border-radius: 12px; padding: 10px 12px; margin-top: 10px; }
 .picked-card div { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .picked-card small { color: var(--sub); }
