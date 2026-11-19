@@ -1,7 +1,7 @@
 // 여행 상세 화면: 상단 항목(일행/준비물/메모/가계부/기록) + 지도 + 일정
 import * as store from './store.js';
 import { session, go, demoBanner } from './app.js';
-import { TripMap, hasMapKey, searchPlaces, DAY_COLORS, kakaoMapLink, createPickMap, reverseGeocode } from './map.js';
+import { TripMap, hasMapKey, searchPlaces, DAY_COLORS, kakaoMapLink, createPickMap, reverseGeocode, searchAddress } from './map.js';
 import {
   esc, $, $$, toast, won, fmtDate, addDays, isoDate, dayCount, tripRangeLabel, timeAgo,
   openSheet, openSheets, confirmBox, avatar, ROLE_LABEL,
@@ -286,7 +286,9 @@ function openItemEditor(item, dayIndex) {
         resEl.innerHTML = searching ? '<li class="muted">검색 중…</li>'
           : noResult ? `<li class="no-result">'${esc(q.value.trim())}' 검색 결과가 없어요.<br><button type="button" class="btn primary" data-pick2>📍 지도에서 직접 위치 찍기</button></li>`
           : results.map((p, i) => `
-          <li><button class="place-row" data-i="${i}"><b>${esc(p.name)}</b><small>${esc(p.category)} · ${esc(p.address)}</small></button></li>`).join('');
+          <li><button class="place-row" data-i="${i}">${p.isAddress
+            ? `<b>📍 ${esc(p.name)}</b><small>${p.name !== p.address ? `${esc(p.address)} · ` : ''}${esc(p.category)}</small>`
+            : `<b>${esc(p.name)}</b><small>${esc(p.category)} · ${esc(p.address)}</small>`}</button></li>`).join('');
         const p2 = $('[data-pick2]', resEl);
         if (p2) p2.onclick = openPicker;
         $$('[data-i]', resEl).forEach((b) => (b.onclick = () => {
@@ -305,7 +307,14 @@ function openItemEditor(item, dayIndex) {
           timer = setTimeout(async () => {
             searching = true; paintResults();
             const near = itemsOfDay(+$('[data-day]', body).value).filter((i) => i.lat).pop() || regionCenter();
-            results = await searchPlaces(v, near).catch(() => []);
+            // 주소 검색과 장소 검색을 함께 → 주소가 맞으면 맨 위에 표시
+            const [addrs, places] = await Promise.all([
+              searchAddress(v).catch(() => []),
+              searchPlaces(v, near).catch(() => []),
+            ]);
+            if (q.value.trim() !== v) return; // 그 사이 검색어가 바뀜
+            const seen = new Set(addrs.map((a) => a.address));
+            results = [...addrs, ...places.filter((p) => !(p.address && seen.has(p.address) && p.name === p.address))];
             searching = false; paintResults();
           }, 300);
         };

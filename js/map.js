@@ -110,6 +110,29 @@ export async function searchPlaces(keyword, near) {
   });
 }
 
+// 도로명·지번 주소 검색 (예: '세종대로 110', '해운대구 우동 1411')
+export async function searchAddress(query) {
+  const kakao = await loadKakao();
+  const geocoder = new kakao.maps.services.Geocoder();
+  return new Promise((resolve) => {
+    geocoder.addressSearch(query, (data, status) => {
+      if (status !== kakao.maps.services.Status.OK) return resolve([]);
+      resolve(data.map((d) => {
+        const road = d.road_address?.address_name || null;
+        const jibun = d.address?.address_name || null;
+        const building = d.road_address?.building_name || '';
+        return {
+          id: null, isAddress: true,
+          name: building || road || jibun || d.address_name,
+          address: road || jibun || d.address_name,
+          category: road && jibun ? `지번 ${jibun}` : '주소',
+          lat: parseFloat(d.y), lng: parseFloat(d.x),
+        };
+      }));
+    }, { size: 10 });
+  });
+}
+
 // 좌표 → 주소
 export async function reverseGeocode(lat, lng) {
   const kakao = await loadKakao();

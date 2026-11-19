@@ -1,5 +1,5 @@
 // 서비스 워커: 앱 화면 파일을 캐시해 빠르게 열리도록 함 (데이터는 항상 서버에서)
-const CACHE = 'trip-planner-v2';
+const CACHE = 'trip-planner-v3';
 const SHELL = ['./', 'index.html', 'css/style.css', 'js/app.js', 'js/trip.js', 'js/store.js', 'js/ui.js',
   'js/map.js', 'js/regions.js', 'js/config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 
